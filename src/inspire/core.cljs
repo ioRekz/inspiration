@@ -32,7 +32,6 @@
 
 (defn with [db data] (merge db data))
 
-;; define your app data so that it doesn't get over-written on reload
 
 (defonce app-state (atom {:show "jvuillermet" :timelines sample-timelines}))
 (set! (.-onhashchange js/window) #(swap! app-state assoc :show (get-location-hash)))
@@ -46,26 +45,34 @@
 (defn current-user [] (:show @app-state))
 (defn set-current-user! [user] (swap! app-state assoc :show user))
 
+(defn get-val [id]
+  (.-value (. js/document (getElementById id))))
 
-(defn handle-submit [ev steps inspiration step]
+(defn handle-submit [ev steps inspiration step input]
   (.preventDefault ev)
-  (swap! inspiration assoc (first (step)) (.-value (. js/document (getElementById "input"))))
-  (set! (.-value (. js/document (getElementById "input"))) "")
+  (swap! inspiration assoc (first (step)) @input)
+  (reset! input nil)
   (when (= (count @inspiration) (count steps))
     (swap! app-state assoc-in [:timelines (current-user) (.now js/Date)] (assoc @inspiration :media (keyword (:media @inspiration))))
     (reset! inspiration {})))
 
 (defn add-entry []
-  (let [steps [[:link "Add new inspirational link"] [:title "What's the title"] [:media "Is this a video, book or article"]]
+  (let [steps [[:link "Add new inspirational link"] [:title "What's the title"] [:media "Is this a video, book or article"]
+               [:comment "Optionally comment how that inspire you"]]
         inspiration (atom {})
+        input (atom "")
         step #(get steps (count @inspiration))]
     (fn []
       [:form.ui.form.add-entry
-        {:onSubmit #(handle-submit % steps inspiration step)}
-        [:input#input.link {:type "text" :placeholder (second (step))}]])))
+        {:onSubmit #(handle-submit % steps inspiration step input)}
+        [:span.add-input
+          [:input#input.link {:type "text" :value @input :onChange #(reset! input (-> % .-target .-value)) :placeholder (second (step))}]
+          (when-not (clojure.string/blank? @input)
+            [:button.next.show.icon-right {:onClick #(handle-submit % steps inspiration step input)}])]])))
 
 (defn header []
   [:header
+    [:button.join "inspire others"]
     [:img.avatar {:src "https://pbs.twimg.com/profile_images/2141577891/186037_585958959_5778360_n_bigger.jpg"}]
     [:h1 (str "@" (current-user))]])
 
