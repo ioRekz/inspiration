@@ -27,8 +27,8 @@
                                       1361318400000 {:title "Brett Victor - Inventing on Principle", :media :video :link "https://vimeo.com/36579366"}}
                        "brettfan" {1399680000000 {:title "Brett Victor - Inventing on Principle" :media :video :link "https://vimeo.com/36579366"}
                                    1361318400000 {:title "Rich Hickey - Simple Made Easy", :media :video :link "http://www.infoq.com/presentations/Simple-Made-Easy" :refs [["zucker" 293939]]}}
-                       "randomco" {1399680000000 {:title "Brett Victor - Inventing on Principle" :media :video :link "https://vimeo.com/36579366"}
-                                   1361318400000 {:title "Rich Hickey - Simple Made Easy", :media :video :link "http://www.infoq.com/presentations/Simple-Made-Easy" :refs [["zucker" 293939]]}}})
+                       "randomco" {1399680000000 {:title "Brett Victor Random - Inventing on Principle" :media :video :link "https://vimeo.com/36579366"}
+                                   1361318400000 {:title "Rich Hickey Random - Simple Made Easy", :media :video :link "http://www.infoq.com/presentations/Simple-Made-Easy" :refs [["zucker" 293939]]}}})
 
 (defn with [db data] (merge db data))
 
@@ -76,30 +76,69 @@
     [:img.avatar {:src "https://pbs.twimg.com/profile_images/2141577891/186037_585958959_5778360_n_bigger.jpg"}]
     [:h1 (str "@" (current-user))]])
 
-(defn timeline []
-  (prn @app-state)
-  [:section#cd-timeline.cd-container
+(defn timeline [user show? anim switch!]
+  [:li {:className (str (when show? " selected ") anim)}
     (doall
-      (for [[date {:keys [title comment link media]}] (with db (get-in @app-state [:timelines (current-user)]))]
+      (for [[idx [date {:keys [title comment link media]}]] (map-indexed vector (with db (get-in @app-state [:timelines user])))]
         ^{:key date}
         [:div.cd-timeline-block
           [:div.cd-timeline-img {:className (str "cd-" (name media))}
             [:img {:src (str "image/" (name media) ".svg")}]]
           [:div.cd-timeline-content
-            [:a {:href link :target "_blank"} [:h2 title]]
+            [:a {:href link :target "_blank"} [:h2 title user]]
             (when comment [:p comment])
-            (let [related (related (:timelines @app-state) link (current-user))]
+            (let [related (related (:timelines @app-state) link user)]
               (when-not (empty? related)
                 [:div.inspired
                   (doall (for [ref related]
-                            ^{:key ref} [:a.cd-read-more {:href (str "#" ref)} ref]))]))
+                            ^{:key ref} [:span.cd-read-more {:onClick #(switch! ref (even? idx)) :href (str "#" ref)} ref]))]))
             [:span.cd-date (format-date date)]]]))])
+
+(defn timelines []
+  (let [next (atom nil) current (atom (current-user))
+        animating (atom nil)
+        flip (atom true)
+        on-switch (fn [u direction]
+                    (js/setTimeout
+                      #(reset! animating nil)
+                      500)
+                    (reset! (if @flip next current) u)
+                    (set-current-user! u)
+                    (swap! flip not)
+                    (reset! animating direction) 2)
+        direction #(case [% %2] [false false] "right" [false true] "left" [true false] "left" [true true] "right")
+        animation #(and (not (nil? @animating)) (str (if % "enter-" "leave-") (direction % @animating)))]
+    (fn []
+      (prn @current)
+      (prn @next)
+      [:section#cd-timeline.cd-container.cd-horizontal-timeline
+        [:div.events-content
+          [:ol
+            [timeline @current @flip (animation @flip) on-switch]
+            [timeline @next (not @flip) (animation (not @flip)) on-switch]]]])))
+
 
 (defn entry []
   [:span
     [header]
     [add-entry]
-    [timeline]])
+    [timelines]])
+
+; (defn entry []
+;   (let [next (atom nil) current (atom (current-user))
+;         animating (atom nil)
+;         flip (atom true)
+;         on-switch (fn [u direction] (prn u direction) (js/setTimeout #(reset! animating nil) 500) (reset! next u) (swap! flip not) (reset! animating direction) 2)
+;         direction #(case [% %2] [false false] "right" [false true] "left" [true false] "left" [true true] "right")
+;         animation #(and (not (nil? @animating)) (str (if % "enter-" "leave-") (direction % @animating)))]
+;     (fn []
+;       [:div.cd-horizontal-timeline
+;         [:div.events-content
+;           [:ol
+;             [:li {:className (str (when @flip " selected ") (animation @flip))}
+;               [page @current on-switch]]
+;             [:li {:className (str (when (not @flip) " selected ") (animation (not @flip)))}
+;               [page @next on-switch]]]]])))
 
 (reagent/render-component [entry]
                           (. js/document (getElementById "app")))
